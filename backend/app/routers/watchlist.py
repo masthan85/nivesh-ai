@@ -5,7 +5,7 @@ from app.models.user import User
 from app.models.goal import WatchItem, PriceAlert
 from app.schemas.portfolio import WatchCreate, AlertCreate
 from app.utils.auth import get_current_user
-from app.services.market_data import get_live_price
+from app.services.market_data import get_quote
 
 watchlist_router = APIRouter(prefix="/watchlist", tags=["Watchlist"])
 alerts_router    = APIRouter(prefix="/alerts",    tags=["Price Alerts"])
@@ -17,16 +17,19 @@ def get_watchlist(user: User = Depends(get_current_user), db: Session = Depends(
     items = db.query(WatchItem).filter(WatchItem.user_id == user.id).all()
     result = []
     for w in items:
-        ltp, chg = get_live_price(w.symbol)
+        quote = get_quote(w.symbol)
+        prev = quote.previous_close or quote.price
+        chg = 0.0 if quote.price is None or prev in (None, 0) else float((quote.price - prev) / prev * 100)
         result.append({
             "id":        w.id,
             "symbol":    w.symbol,
-            "target":    w.target,
-            "stop_loss": w.stop_loss,
+            "target":    float(w.target) if w.target is not None else None,
+            "stop_loss": float(w.stop_loss) if w.stop_loss is not None else None,
             "notes":     w.notes,
-            "ltp":       ltp,
+            "ltp":       float(quote.price) if quote.price is not None else None,
             "change_pct":chg,
             "added_at":  w.added_at.isoformat() if w.added_at else "",
+            "market_data": {"source": quote.source, "as_of": quote.as_of.isoformat(), "freshness": quote.freshness, "is_live": quote.is_live},
         })
     return result
 
@@ -61,7 +64,7 @@ def get_alerts(user: User = Depends(get_current_user), db: Session = Depends(get
 
 @alerts_router.post("/", status_code=201)
 def create_alert(data: AlertCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    a = PriceAlert(user_id=user.id, **data.dict())
+    a = PriceAlert(user_id=user.id, **data.model_dump())
     db.add(a)
     db.commit()
     db.refresh(a)

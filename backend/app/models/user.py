@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -12,7 +12,7 @@ class User(Base):
     hashed_pw    = Column(String(255), nullable=False)
     risk         = Column(String(20), default="Moderate")   # Conservative | Moderate | Aggressive
     horizon      = Column(Integer, default=7)               # investment horizon in years
-    monthly_sip  = Column(Float, default=10000)
+    monthly_sip  = Column(Numeric(24, 2), default=0)
     is_active    = Column(Boolean, default=True)
     created_at   = Column(DateTime, default=datetime.utcnow)
     updated_at   = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

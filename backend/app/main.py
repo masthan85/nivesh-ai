@@ -1,77 +1,70 @@
-"""
-Nivesh AI — Backend Entry Point
-FastAPI application with all routers registered.
-Run: uvicorn app.main:app --reload --port 8000
-"""
+from datetime import datetime, timezone
 from fastapi import FastAPI
+from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base
+from app.utils.security import SecurityHeadersMiddleware
+from app.utils.request_context import RequestContextMiddleware, InMemoryRateLimitMiddleware
+from app.database import SessionLocal
 
-# Import all models so SQLAlchemy creates tables
-import app.models.user       # noqa
-import app.models.portfolio  # noqa
-import app.models.goal       # noqa
+import app.models.user  # noqa: F401
+import app.models.portfolio  # noqa: F401
+import app.models.goal  # noqa: F401
+import app.models.audit  # noqa: F401
 
-# Create all tables
-Base.metadata.create_all(bind=engine)
+if settings.AUTO_CREATE_SCHEMA and settings.ENVIRONMENT.lower() != 'production':
+    Base.metadata.create_all(bind=engine)
 
-# Import routers
-from app.routers.auth      import router as auth_router
+from app.routers.auth import router as auth_router
 from app.routers.portfolio import router as portfolio_router
-from app.routers.market    import router as market_router
-from app.routers.broker    import router as broker_router
-from app.routers.tax       import router as tax_router
-from app.routers.goals     import router as goals_router
+from app.routers.market import router as market_router
+from app.routers.broker import router as broker_router
+from app.routers.tax import router as tax_router
+from app.routers.goals import router as goals_router
 from app.routers.watchlist import watchlist_router, alerts_router
-from app.routers.ai_chat   import router as ai_router
-from app.routers.news      import news_router
-from app.routers.briefing  import router as briefing_router
+from app.routers.ai_chat import router as ai_router
+from app.routers.news import news_router
+from app.routers.briefing import router as briefing_router
 from app.routers.websocket import ws_router
 
 app = FastAPI(
-    title="Nivesh AI API",
-    description="Nivesh AI — AI-powered investment intelligence built for India. Portfolio tracking, broker cost comparison, tax P&L, goal planning and AI advisor.",
-    version="2.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    title=f'{settings.APP_NAME} API',
+    description='Investment intelligence platform. Financial outputs must disclose freshness and source limitations.',
+    version=settings.API_VERSION,
+    docs_url='/docs' if settings.ENVIRONMENT != 'production' else None,
+    redoc_url='/redoc' if settings.ENVIRONMENT != 'production' else None,
 )
-
-# CORS
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestContextMiddleware)
+app.add_middleware(InMemoryRateLimitMiddleware, requests_per_minute=settings.RATE_LIMIT_PER_MINUTE)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list + ["*"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allow_headers=['Authorization', 'Content-Type', 'X-Request-ID'],
 )
+for router in [auth_router, portfolio_router, market_router, broker_router, tax_router,
+               goals_router, watchlist_router, alerts_router, ai_router, news_router,
+               briefing_router, ws_router]:
+    app.include_router(router)
 
-# Register all routers
-app.include_router(auth_router)
-app.include_router(portfolio_router)
-app.include_router(market_router)
-app.include_router(broker_router)
-app.include_router(tax_router)
-app.include_router(goals_router)
-app.include_router(watchlist_router)
-app.include_router(alerts_router)
-app.include_router(ai_router)
-app.include_router(news_router)
-app.include_router(briefing_router)
-app.include_router(ws_router)
-
-
-@app.get("/", tags=["Health"])
+@app.get('/', tags=['Health'])
 def root():
-    return {
-        "service": "Nivesh AI",
-        "version": "2.0.0",
-        "status":  "running",
-        "docs":    "/docs",
-    }
+    return {'service': settings.APP_NAME, 'version': settings.API_VERSION, 'status': 'running'}
 
-
-@app.get("/health", tags=["Health"])
+@app.get('/health', tags=['Health'])
 def health():
-    from datetime import datetime
-    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+    return {'status': 'ok', 'service': settings.APP_NAME, 'timestamp': datetime.now(timezone.utc).isoformat()}
+
+@app.get('/ready', tags=['Health'])
+def ready():
+    try:
+        with SessionLocal() as db:
+            db.execute(text('SELECT 1'))
+        database = 'ready'
+    except Exception:
+        database = 'unavailable'
+    status = 'ready' if database == 'ready' else 'not_ready'
+    return {'status': status, 'database': database, 'market_data_mode': settings.MARKET_DATA_MODE}

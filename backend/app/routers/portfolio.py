@@ -1,109 +1,121 @@
+from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from typing import List
 from app.database import get_db
 from app.models.user import User
 from app.models.portfolio import Holding
 from app.schemas.portfolio import HoldingCreate, HoldingUpdate
 from app.utils.auth import get_current_user
-from app.services.market_data import get_live_price
+from app.services.market_data import get_quote
+from app.services.portfolio_calculator import holding_metrics, portfolio_totals
 
-router = APIRouter(prefix="/portfolio", tags=["Portfolio"])
+router = APIRouter(prefix='/portfolio', tags=['Portfolio'])
 
 
-@router.get("/holdings")
+def _effective_price(holding, quote):
+    if quote.price is not None:
+        return quote.price, quote
+    return Decimal(str(holding.avg_price)), quote
+
+
+@router.get('/holdings')
 def get_holdings(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     holdings = db.query(Holding).filter(Holding.user_id == user.id).all()
     result = []
     for h in holdings:
-        ltp, chg = get_live_price(h.symbol)
-        if ltp == 0:
-            ltp = h.avg_price
-        pnl     = (ltp - h.avg_price) * h.qty
-        pnl_pct = (ltp - h.avg_price) / h.avg_price * 100 if h.avg_price else 0
+        quote = get_quote(h.symbol)
+        price, quote = _effective_price(h, quote)
+        metrics = holding_metrics(h.qty, h.avg_price, price)
+        previous = quote.previous_close or price
+        change_pct = Decimal('0') if previous == 0 else (price - previous) / previous * Decimal('100')
         result.append({
-            "id":             h.id,
-            "symbol":         h.symbol,
-            "name":           h.name,
-            "qty":            h.qty,
-            "avg_price":      h.avg_price,
-            "sector":         h.sector,
-            "exchange":       h.exchange,
-            "asset_type":     h.asset_type,
-            "buy_date":       h.buy_date,
-            "ltp":            ltp,
-            "change_pct":     round(chg, 2),
-            "pnl":            round(pnl, 2),
-            "pnl_pct":        round(pnl_pct, 2),
-            "current_value":  round(ltp * h.qty, 2),
-            "invested_value": round(h.avg_price * h.qty, 2),
+            'id': h.id,
+            'symbol': h.symbol,
+            'name': h.name,
+            'qty': float(h.qty),
+            'avg_price': float(h.avg_price),
+            'sector': h.sector,
+            'exchange': h.exchange,
+            'asset_type': h.asset_type,
+            'buy_date': h.buy_date,
+            'ltp': float(price),
+            'change_pct': float(change_pct.quantize(Decimal('0.01'))),
+            **metrics,
+            'market_data': {
+                'source': quote.source,
+                'as_of': quote.as_of.isoformat(),
+                'freshness': quote.freshness,
+                'is_live': quote.is_live,
+                'fallback_to_cost': quote.price is None,
+            },
         })
     return result
 
 
-@router.get("/summary")
+@router.get('/summary')
 def get_summary(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     holdings = db.query(Holding).filter(Holding.user_id == user.id).all()
-    total_invested = sum(h.avg_price * h.qty for h in holdings)
-    total_current  = 0.0
-    sector_map     = {}
-
+    rows = []
+    sector_values: dict[str, Decimal] = {}
+    unavailable_symbols = []
     for h in holdings:
-        ltp, _ = get_live_price(h.symbol)
-        if ltp == 0:
-            ltp = h.avg_price
-        val = ltp * h.qty
-        total_current += val
-        sector_map[h.sector] = sector_map.get(h.sector, 0) + val
+        quote = get_quote(h.symbol)
+        price, _ = _effective_price(h, quote)
+        if quote.price is None:
+            unavailable_symbols.append(h.symbol)
+        rows.append((h.qty, h.avg_price, price))
+        value = Decimal(str(price)) * Decimal(str(h.qty))
+        sector_values[h.sector] = sector_values.get(h.sector, Decimal('0')) + value
 
-    gain     = total_current - total_invested
-    gain_pct = gain / total_invested * 100 if total_invested else 0
-
-    sectors = [
-        {"name": k, "value": round(v, 2), "pct": round(v / total_current * 100, 1) if total_current else 0}
-        for k, v in sector_map.items()
-    ]
-    sectors.sort(key=lambda x: -x["pct"])
+    totals = portfolio_totals(rows)
+    current = Decimal(str(totals['total_current']))
+    sectors = []
+    for name, value in sector_values.items():
+        pct = Decimal('0') if current == 0 else value / current * Decimal('100')
+        sectors.append({'name': name, 'value': float(value.quantize(Decimal('0.01'))), 'pct': float(pct.quantize(Decimal('0.1')))})
+    sectors.sort(key=lambda x: -x['pct'])
 
     return {
-        "total_invested":  round(total_invested, 2),
-        "total_current":   round(total_current, 2),
-        "total_gain":      round(gain, 2),
-        "gain_pct":        round(gain_pct, 2),
-        "holding_count":   len(holdings),
-        "sectors":         sectors,
-        "health_score":    min(100, max(40, round(60 + gain_pct * 0.5, 1))),
-        "ai_score":        min(100, max(50, round(65 + gain_pct * 0.4, 1))),
+        **totals,
+        'holding_count': len(holdings),
+        'sectors': sectors,
+        'market_data_complete': not unavailable_symbols,
+        'unavailable_symbols': unavailable_symbols,
+        'valuation_note': 'When market data is unavailable, cost basis is used only as an explicit fallback and is not represented as a live valuation.' if unavailable_symbols else None,
     }
 
 
-@router.post("/holdings", status_code=201)
+@router.post('/holdings', status_code=201)
 def add_holding(data: HoldingCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    h = Holding(user_id=user.id, **data.dict())
+    h = Holding(user_id=user.id, **data.model_dump())
     db.add(h)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail='Holding already exists for this symbol and exchange')
     db.refresh(h)
     return h
 
 
-@router.put("/holdings/{holding_id}")
+@router.put('/holdings/{holding_id}')
 def update_holding(holding_id: int, data: HoldingUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     h = db.query(Holding).filter(Holding.id == holding_id, Holding.user_id == user.id).first()
     if not h:
-        raise HTTPException(status_code=404, detail="Holding not found")
-    update_data = data.dict(exclude_unset=True)
-    for k, v in update_data.items():
-        setattr(h, k, v)
+        raise HTTPException(status_code=404, detail='Holding not found')
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(h, key, value)
     db.commit()
     db.refresh(h)
     return h
 
 
-@router.delete("/holdings/{holding_id}")
+@router.delete('/holdings/{holding_id}')
 def delete_holding(holding_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     h = db.query(Holding).filter(Holding.id == holding_id, Holding.user_id == user.id).first()
     if not h:
-        raise HTTPException(status_code=404, detail="Holding not found")
+        raise HTTPException(status_code=404, detail='Holding not found')
     db.delete(h)
     db.commit()
-    return {"ok": True, "deleted_id": holding_id}
+    return {'ok': True, 'deleted_id': holding_id}

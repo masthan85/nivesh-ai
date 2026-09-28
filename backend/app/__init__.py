@@ -1,1 +1,1 @@
-# Nivesh AI Backend
+# Nivara AI Backend

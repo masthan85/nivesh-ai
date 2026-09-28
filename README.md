@@ -1,4 +1,4 @@
-# Nivesh AI — Investment Intelligence Platform
+# Nivara AI — Investment Intelligence Platform
 
 > **AI-powered investment intelligence built for India.**  
 > Your personal Bloomberg Terminal + Zerodha + ChatGPT — all in one app, fully personalized.
@@ -31,7 +31,7 @@
 ## 🏗️ Project Structure
 
 ```
-nivesh-ai/
+nivara-ai/
 ├── backend/                    # FastAPI backend
 │   ├── app/
 │   │   ├── main.py             # App entry point, CORS, router registration
@@ -148,8 +148,8 @@ nivesh-ai/
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/nivesh-ai.git
-cd nivesh-ai
+git clone https://github.com/YOUR_USERNAME/nivara-ai.git
+cd nivara-ai
 ```
 
 ### 2. Backend setup
@@ -199,7 +199,7 @@ docker-compose up --build
 ```env
 SECRET_KEY=your-super-secret-jwt-key-change-this
 ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx
-DATABASE_URL=sqlite:///./nivesh.db
+DATABASE_URL=sqlite:///./nivara.db
 ENVIRONMENT=development
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
@@ -270,7 +270,7 @@ cd frontend && npm run build
 
 ## ⚖️ Disclaimer
 
-> Nivesh AI provides AI-assisted investment insights and market information for educational purposes only. It does **not** constitute certified financial advice. Always consult a SEBI-registered investment advisor before making investment decisions. Nivesh AI is not a registered investment advisor or broker.
+> Nivara AI provides AI-assisted investment insights and market information for educational purposes only. It does **not** constitute certified financial advice. Always consult a SEBI-registered investment advisor before making investment decisions. Nivara AI is not a registered investment advisor or broker.
 
 ---
 

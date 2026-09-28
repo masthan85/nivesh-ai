@@ -16,22 +16,22 @@ def get_goals(user: User = Depends(get_current_user), db: Session = Depends(get_
     result = []
     for g in goals:
         proj     = project_goal(g.saved, g.monthly, g.years, g.risk)
-        progress = min(100, g.saved / g.target * 100) if g.target else 0
+        progress = min(100, float(g.saved / g.target * 100)) if g.target else 0
         req_sip  = required_sip(g.target, g.saved, g.years, g.risk)
         result.append({
             "id":          g.id,
             "name":        g.name,
             "icon":        g.icon,
-            "target":      g.target,
-            "saved":       g.saved,
-            "monthly":     g.monthly,
+            "target":      float(g.target),
+            "saved":       float(g.saved),
+            "monthly":     float(g.monthly),
             "years":       g.years,
             "risk":        g.risk,
             "color":       g.color,
             "progress_pct":round(progress, 1),
             "projected":   proj["projected"],
             "on_track":    proj["projected"] >= g.target,
-            "gap":         round(max(0, g.target - proj["projected"]), 2),
+            "gap":         round(max(0, float(g.target) - proj["projected"]), 2),
             "required_sip":req_sip,
         })
     return result
@@ -39,7 +39,7 @@ def get_goals(user: User = Depends(get_current_user), db: Session = Depends(get_
 
 @router.post("/", status_code=201)
 def create_goal(data: GoalCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    g = Goal(user_id=user.id, **data.dict())
+    g = Goal(user_id=user.id, **data.model_dump())
     db.add(g)
     db.commit()
     db.refresh(g)
@@ -51,7 +51,7 @@ def update_goal(goal_id: int, data: GoalUpdate, user: User = Depends(get_current
     g = db.query(Goal).filter(Goal.id == goal_id, Goal.user_id == user.id).first()
     if not g:
         raise HTTPException(status_code=404, detail="Goal not found")
-    for k, v in data.dict(exclude_unset=True).items():
+    for k, v in data.model_dump(exclude_unset=True).items():
         setattr(g, k, v)
     db.commit()
     db.refresh(g)
