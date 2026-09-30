@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react'
-import { Activity, Bell, BrainCircuit, BriefcaseBusiness, ChartNoAxesCombined, CircleUserRound, House, Search, ShieldCheck, Sparkles } from 'lucide-react'
+import { Activity, Bell, BrainCircuit, BriefcaseBusiness, ChartNoAxesCombined, CircleUserRound, Home, Search, ShieldCheck, Sparkles } from 'lucide-react'
 
 const nav = [
-  ['Home', House], ['Markets', ChartNoAxesCombined], ['Research', Search],
+  ['Home', Home], ['Markets', ChartNoAxesCombined], ['Research', Search],
   ['Portfolio', BriefcaseBusiness], ['Watch', Bell], ['Nia', BrainCircuit]
 ]
 
