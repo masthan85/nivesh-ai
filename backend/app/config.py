@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     API_VERSION: str = '2.1.0'
     SECRET_KEY: str = 'change-this-in-production'
     ANTHROPIC_API_KEY: str = ''
+    ANTHROPIC_MODEL: str = 'claude-sonnet-5-5'
+    NIA_HISTORY_TURNS: int = 10
     DATABASE_URL: str = 'sqlite:///./data/nivara.db'
     ENVIRONMENT: str = 'development'
     CORS_ORIGINS: str = 'http://localhost:5173,http://localhost:3000'

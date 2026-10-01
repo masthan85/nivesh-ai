@@ -70,8 +70,8 @@ def calculate_tax_summary(holdings: list) -> dict:
         'ltcg_tax': as_number(money(ltcg_tax)),
         'total_tax': as_number(money(total_tax)),
         'trades': trades,
-        'calculation_status': 'illustrative-ruleset-requires-current-tax-validation',
-        'disclaimer': 'Tax treatment depends on instrument, transaction date, residency and current law. Validate against authoritative tax guidance before production use.',
+        'calculation_status': 'hypothetical-illustration-rules-require-current-validation',
+        'disclaimer': 'Hypothetical illustration only, not a filing-ready computation. Tax treatment depends on instrument, transaction dates, residency and current law.',
     }
 
 

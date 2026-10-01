@@ -1,49 +1,58 @@
-"""routers/briefing.py — Daily AI briefing"""
-from datetime import datetime
+"""Daily briefing.
+
+Reports only what the application can support with data: the user's holdings and the
+quotes the configured provider returns, each with source and freshness. Index levels,
+market mood and event calendars are not included until a licensed source provides them.
+The briefing describes moves; it does not tell the user what to do about them.
+"""
+from datetime import datetime, timezone
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+
 from app.database import get_db
-from app.models.user import User
+from app.domain.money import percent
 from app.models.portfolio import Holding
+from app.models.user import User
+from app.services.market_data import get_quote
 from app.utils.auth import get_current_user
-from app.services.market_data import get_live_price
 
 router = APIRouter(prefix="/briefing", tags=["Daily Briefing"])
+
+NOTABLE_MOVE_PCT = Decimal("1.5")
 
 
 @router.get("/daily")
 def daily_briefing(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     holdings = db.query(Holding).filter(Holding.user_id == user.id).all()
-    alerts      = []
-    top_movers  = []
+    movers, unavailable, sources = [], [], set()
 
     for h in holdings:
-        ltp, chg = get_live_price(h.symbol)
-        if ltp == 0:
-            ltp = h.avg_price
-        if abs(chg) > 1.5:
-            top_movers.append({"symbol": h.symbol, "change_pct": chg, "ltp": ltp})
-        if chg < -3:
-            alerts.append({"type": "danger",  "msg": f"{h.symbol} is down {abs(chg):.1f}% today. Review your position."})
-        elif chg > 3:
-            alerts.append({"type": "success", "msg": f"{h.symbol} is up {chg:.1f}% today. Consider booking partial profits."})
+        quote = get_quote(h.symbol)
+        sources.add(quote.source)
+        if quote.price is None or not quote.previous_close:
+            unavailable.append(h.symbol)
+            continue
+        change_pct = percent((quote.price - quote.previous_close) / quote.previous_close * Decimal("100"))
+        if abs(change_pct) >= NOTABLE_MOVE_PCT:
+            movers.append({
+                "symbol": h.symbol,
+                "change_pct": float(change_pct),
+                "price": float(quote.price),
+                "source": quote.source,
+                "as_of": quote.as_of.isoformat(),
+                "freshness": quote.freshness,
+            })
 
-    top_movers.sort(key=lambda x: -abs(x["change_pct"]))
-
+    movers.sort(key=lambda m: -abs(m["change_pct"]))
     return {
-        "date":         datetime.now().strftime("%A, %B %d, %Y"),
-        "greeting":     f"Good morning, {user.name}!",
-        "market_mood":  "Bullish",
-        "nifty":        {"value": 22847, "change": 0.43},
-        "sensex":       {"value": 75200, "change": 0.38},
-        "vix":          16.2,
-        "alerts":       alerts,
-        "top_movers":   top_movers[:5],
-        "ai_tip":       f"Focus on your {top_movers[0]['symbol'] if top_movers else 'SIP contributions'} today.",
-        "upcoming_events": [
-            {"date": "May 5",  "event": "Nifty F&O Expiry",    "type": "info"},
-            {"date": "May 8",  "event": "RBI Policy Meeting",   "type": "warn"},
-            {"date": "May 12", "event": "US CPI Data Release",  "type": "warn"},
-            {"date": "May 15", "event": "INFY Q1 Results",      "type": "info"},
-        ]
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "holding_count": len(holdings),
+        "notable_moves": movers[:5],
+        "notable_move_threshold_pct": float(NOTABLE_MOVE_PCT),
+        "unavailable_symbols": unavailable,
+        "data_sources": sorted(sources),
+        "market_overview": {"status": "unavailable", "reason": "No licensed index or market-calendar source is configured."},
+        "note": "Moves are reported for information only and are not recommendations.",
     }

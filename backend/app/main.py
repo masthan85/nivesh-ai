@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
@@ -66,5 +67,7 @@ def ready():
         database = 'ready'
     except Exception:
         database = 'unavailable'
-    status = 'ready' if database == 'ready' else 'not_ready'
-    return {'status': status, 'database': database, 'market_data_mode': settings.MARKET_DATA_MODE}
+    ready_now = database == 'ready'
+    body = {'status': 'ready' if ready_now else 'not_ready', 'database': database, 'market_data_mode': settings.MARKET_DATA_MODE}
+    # Orchestrators read the status code, so an unready service must not answer 200.
+    return JSONResponse(body, status_code=200 if ready_now else 503)

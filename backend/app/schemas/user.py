@@ -31,6 +31,8 @@ class UserCreate(BaseModel):
     def password_strength(cls, value: str) -> str:
         if not any(c.isalpha() for c in value) or not any(c.isdigit() for c in value):
             raise ValueError("Password must contain at least one letter and one number")
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Password must be at most 72 bytes")
         return value
 
 

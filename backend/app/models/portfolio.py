@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Numeric, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from app.domain.clock import utc_now_naive
 from app.database import Base
 
 class Holding(Base):
@@ -18,8 +18,8 @@ class Holding(Base):
     asset_type  = Column(String(20), default="Equity")  # Equity | MF | ETF | Unlisted | Bond
     buy_date    = Column(String(20), default="")
     notes       = Column(Text, default="")
-    created_at  = Column(DateTime, default=datetime.utcnow)
-    updated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at  = Column(DateTime, default=utc_now_naive)
+    updated_at  = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
     user = relationship("User", back_populates="holdings")
 
@@ -31,6 +31,6 @@ class ChatMessage(Base):
     user_id    = Column(Integer, ForeignKey("users.id"), nullable=False)
     role       = Column(String(10), nullable=False)   # user | assistant
     content    = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
 
     user = relationship("User", back_populates="chat_messages")

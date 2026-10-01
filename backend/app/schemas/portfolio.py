@@ -1,8 +1,15 @@
 from decimal import Decimal
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 Money = Decimal
+
+# Constraints live inside Annotated so they also apply when the field is Optional.
+# (pydantic 2.7 rejects max_digits/decimal_places on Optional[Decimal] via Field.)
+Quantity = Annotated[Decimal, Field(gt=0, max_digits=24, decimal_places=8)]
+Price = Annotated[Decimal, Field(gt=0, max_digits=24, decimal_places=4)]
+PositiveMoney = Annotated[Decimal, Field(gt=0, max_digits=24, decimal_places=2)]
+NonNegativeMoney = Annotated[Decimal, Field(ge=0, max_digits=24, decimal_places=2)]
 
 class HoldingCreate(BaseModel):
     symbol: str = Field(min_length=1, max_length=20, pattern=r'^[A-Za-z0-9._-]+$')
@@ -21,8 +28,8 @@ class HoldingCreate(BaseModel):
         return value.upper().strip()
 
 class HoldingUpdate(BaseModel):
-    qty: Optional[Decimal] = Field(default=None, gt=0, max_digits=24, decimal_places=8)
-    avg_price: Optional[Decimal] = Field(default=None, gt=0, max_digits=24, decimal_places=4)
+    qty: Optional[Quantity] = None
+    avg_price: Optional[Price] = None
     sector: Optional[str] = Field(default=None, max_length=50)
     notes: Optional[str] = Field(default=None, max_length=2000)
 
@@ -38,16 +45,16 @@ class GoalCreate(BaseModel):
 
 class GoalUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    target: Optional[Decimal] = Field(default=None, gt=0, max_digits=24, decimal_places=2)
-    saved: Optional[Decimal] = Field(default=None, ge=0, max_digits=24, decimal_places=2)
-    monthly: Optional[Decimal] = Field(default=None, ge=0, max_digits=24, decimal_places=2)
+    target: Optional[PositiveMoney] = None
+    saved: Optional[NonNegativeMoney] = None
+    monthly: Optional[NonNegativeMoney] = None
     years: Optional[int] = Field(default=None, ge=1, le=60)
     risk: Optional[Literal['Conservative', 'Moderate', 'Aggressive']] = None
 
 class WatchCreate(BaseModel):
     symbol: str = Field(min_length=1, max_length=20, pattern=r'^[A-Za-z0-9._-]+$')
-    target: Optional[Decimal] = Field(default=None, gt=0, max_digits=24, decimal_places=4)
-    stop_loss: Optional[Decimal] = Field(default=None, gt=0, max_digits=24, decimal_places=4)
+    target: Optional[Price] = None
+    stop_loss: Optional[Price] = None
     notes: str = Field(default='', max_length=500)
 
 class AlertCreate(BaseModel):
@@ -57,11 +64,17 @@ class AlertCreate(BaseModel):
     notify_push: bool = True
     notify_email: bool = True
 
+TradeType = Literal['delivery', 'intraday', 'fo']
+
+
 class BrokerCalcRequest(BaseModel):
     price: Decimal = Field(gt=0, max_digits=24, decimal_places=4)
     qty: int = Field(gt=0, le=10_000_000)
     trade_type: Literal['delivery', 'intraday', 'fo']
 
 class ChatRequest(BaseModel):
+    # Conversation history is loaded from the server's own store, never taken from the client,
+    # so a client cannot forge earlier assistant turns or inject system-style instructions.
+    model_config = {'extra': 'forbid'}
+
     message: str = Field(min_length=1, max_length=4000)
-    history: list[dict] = Field(default_factory=list, max_length=20)

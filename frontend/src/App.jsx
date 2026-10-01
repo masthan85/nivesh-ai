@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Activity, Bell, BrainCircuit, BriefcaseBusiness, ChartNoAxesCombined, CircleUserRound, Home, Search, ShieldCheck, Sparkles } from 'lucide-react'
 
 const nav = [

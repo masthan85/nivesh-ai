@@ -28,6 +28,6 @@ export const portfolioAPI = {
   compareBrokers: (price, qty, tradeType) =>
     client.post('/broker/calculate', { price, qty, trade_type: tradeType }),
 
-  aiChat: (message, history)  => client.post('/ai/chat', { message, history }),
+  aiChat: (message)           => client.post('/ai/chat', { message }),
   chatHistory: ()             => client.get('/ai/history'),
 }

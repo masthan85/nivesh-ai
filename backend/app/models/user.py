@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Numeric, DateTime, Boolean
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from app.domain.clock import utc_now_naive
 from app.database import Base
 
 class User(Base):
@@ -14,8 +14,8 @@ class User(Base):
     horizon      = Column(Integer, default=7)               # investment horizon in years
     monthly_sip  = Column(Numeric(24, 2), default=0)
     is_active    = Column(Boolean, default=True)
-    created_at   = Column(DateTime, default=datetime.utcnow)
-    updated_at   = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at   = Column(DateTime, default=utc_now_naive)
+    updated_at   = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
     # Relationships
     holdings     = relationship("Holding",    back_populates="user", cascade="all, delete-orphan")
