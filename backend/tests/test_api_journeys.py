@@ -150,3 +150,52 @@ def test_readiness_and_docs_headers(client):
     assert client.get("/ready").status_code == 200
     assert "cdn.jsdelivr.net" in client.get("/docs").headers["content-security-policy"]
     assert client.get("/health").headers["content-security-policy"].startswith("default-src 'none'")
+
+
+def test_broker_provider_catalog_is_safe_and_descriptive(client):
+    r = client.get('/broker/providers')
+    assert r.status_code == 200
+    providers = {p['id']: p for p in r.json()['providers']}
+    assert providers['groww']['connection_mode'] == 'user_access_token'
+    assert providers['groww']['read_only'] is True
+    assert providers['motilal-oswal']['connection_mode'] == 'broker_redirect'
+    assert 'password' in ' '.join(providers['motilal-oswal']['limitations']).lower()
+
+
+def test_groww_connection_requires_nivara_auth(client):
+    r = client.post('/broker/connect/groww/preview', json={'access_token': 'x' * 32})
+    assert r.status_code == 401
+
+
+def test_groww_connection_returns_sanitized_snapshot(client, monkeypatch):
+    h = register(client, 'brokerconnect@example.com')
+
+    def fake_snapshot(access_token):
+        assert access_token == 'x' * 32
+        return {
+            'provider': 'groww',
+            'status': 'connected_snapshot',
+            'read_only': True,
+            'persisted_token': False,
+            'source': 'Groww Trading API',
+            'as_of': '2026-10-01T12:00:00+00:00',
+            'profile': {'ucc': '12345', 'active_segments': ['CASH']},
+            'holdings': [{'isin': 'INE000000001', 'symbol': 'TEST', 'quantity': 2, 'average_price': 100}],
+            'holding_count': 1,
+            'notice': 'snapshot only',
+        }
+
+    monkeypatch.setattr('app.routers.broker.fetch_groww_snapshot', fake_snapshot)
+    r = client.post('/broker/connect/groww/preview', headers=h, json={'access_token': 'x' * 32})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body['holding_count'] == 1
+    assert body['persisted_token'] is False
+    assert 'access_token' not in body
+
+
+def test_motilal_connector_requires_configuration(client):
+    h = register(client, 'motilal@example.com')
+    r = client.get('/broker/connect/motilal-oswal', headers=h)
+    assert r.status_code == 503
+    assert 'MOTILAL_API_KEY' in r.json()['detail']

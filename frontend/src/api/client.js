@@ -8,20 +8,18 @@ const client = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Attach JWT on every request
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem('nivara_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
 
-// Handle 401 — redirect to login
 client.interceptors.response.use(
   (res) => res,
   (err) => {
     if (err.response?.status === 401) {
       localStorage.removeItem('nivara_token')
-      window.location.href = '/login'
+      window.dispatchEvent(new CustomEvent('nivara:unauthorized'))
     }
     return Promise.reject(err)
   }

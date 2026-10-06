@@ -70,3 +70,13 @@ Nivara AI provides information and illustrations for educational purposes. It is
 ## Licence
 
 No licence has been chosen yet. Until one is added, all rights are reserved by the author.
+
+## Broker connections
+
+The stabilised build now includes a **Connections** workspace with:
+
+- Nivara account sign-in/registration using the existing auth API.
+- Groww read-only connection using a current Groww Trading API access token. Nivara verifies the account and fetches a holdings snapshot without persisting the broker token.
+- Motilal Oswal broker-hosted login preparation. Set `MOTILAL_API_KEY` in `backend/.env` after provider setup; a registered broker callback is still required for automated syncing.
+
+See `docs/BROKER_CONNECTIONS.md` for the security model, setup steps, and limitations.

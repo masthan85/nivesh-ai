@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     MARKET_DATA_MODE: str = 'development'
     RATE_LIMIT_PER_MINUTE: int = 120
     AUTO_CREATE_SCHEMA: bool = True
+    MOTILAL_API_KEY: str = ''
 
     @field_validator('ACCESS_TOKEN_EXPIRE_MINUTES')
     @classmethod
